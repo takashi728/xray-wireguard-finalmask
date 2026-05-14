@@ -20,10 +20,21 @@
 
 set -euo pipefail
 
+# ─── Error trap: show line number on failure ─────────────────────────
+trap 'echo -e "\n${RED}ERROR at line $LINENO — exiting${NC}" >&2' ERR
+
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 CONFIG_DIR="$SCRIPT_DIR/.."
 SERVER_DIR="$CONFIG_DIR/server"
 CLIENT_DIR="$CONFIG_DIR/client"
+
+# Auto-detect if running standalone (no repo cloned alongside)
+STANDALONE=false
+if [ ! -d "$SERVER_DIR" ] || [ ! -d "$CLIENT_DIR" ]; then
+  STANDALONE=true
+  SERVER_DIR=""
+  CLIENT_DIR=""
+fi
 DEPLOY_DIR="/opt/xray-wg"
 CLIENT_OUT_DIR="$SCRIPT_DIR/clients"
 XRAY_VERSION="v26.3.27"
@@ -244,7 +255,10 @@ setup_domain() {
   # Check if acme.sh is installed
   if ! command -v acme.sh &>/dev/null; then
     echo -e "  ${YELLOW}Installing acme.sh...${NC}"
-    curl -s https://get.acme.sh | sh -s email="admin@${DOMAIN}"
+    curl -sS https://get.acme.sh | sh -s email="admin@${DOMAIN}" || {
+      echo -e "${RED}ERROR: Failed to install acme.sh${NC}"
+      exit 1
+    }
     # shellcheck source=/dev/null
     source ~/.bashrc 2>/dev/null || true
     export PATH="$HOME/.acme.sh:$PATH"
@@ -321,7 +335,12 @@ install_xray() {
   TMP_DIR=$(mktemp -d)
 
   echo "  Downloading: $URL"
-  curl -sL "$URL" -o "$TMP_DIR/xray.zip"
+  if ! curl -sSL --retry 3 --retry-delay 2 "$URL" -o "$TMP_DIR/xray.zip"; then
+    echo -e "${RED}ERROR: Failed to download Xray-core${NC}"
+    echo "  URL: $URL"
+    echo "  Check network or try a different version"
+    exit 1
+  fi
 
   mkdir -p /usr/local/bin /usr/local/share/xray
 
@@ -345,8 +364,12 @@ generate_config() {
   mkdir -p "$DEPLOY_DIR"
 
   local OUT="$DEPLOY_DIR/config.json"
-  local TEMPLATE
-  TEMPLATE=$(ls "$SERVER_DIR/${SCENARIO}-"*.json 2>/dev/null | head -1)
+  local TEMPLATE=""
+
+  # Try local template first (only if repo is cloned)
+  if [ -n "$SERVER_DIR" ] && [ -d "$SERVER_DIR" ]; then
+    TEMPLATE=$(ls "$SERVER_DIR/${SCENARIO}-"*.json 2>/dev/null | head -1) || true
+  fi
 
   # If running standalone (curl'd script, no repo), download template from GitHub
   if [ -z "$TEMPLATE" ] || [ ! -f "$TEMPLATE" ]; then
@@ -365,9 +388,15 @@ generate_config() {
     esac
 
     if [ -n "$TPL_FILE" ]; then
-      echo "  Downloading template from GitHub..."
+      echo "  Downloading server template from GitHub..."
       TEMPLATE="$DEPLOY_DIR/template-${SCENARIO}.json"
-      curl -sL "${RAW_BASE}/${TPL_FILE}" -o "$TEMPLATE"
+      curl -sSL --retry 3 --retry-delay 2 "${RAW_BASE}/${TPL_FILE}" -o "$TEMPLATE" || {
+        echo -e "${RED}ERROR: Failed to download template from GitHub${NC}"
+        echo "  URL: ${RAW_BASE}/${TPL_FILE}"
+        echo "  Check network or clone the repo:"
+        echo "  git clone https://github.com/takashi728/xray-wireguard-finalmask.git"
+        exit 1
+      }
     fi
   fi
 
@@ -413,8 +442,8 @@ generate_config() {
   dns_json=$(cf_dns_config)
   config=${config/\"outbounds\"/$dns_json\"outbounds\"}
 
-  # Write config
-  echo "$config" > "$OUT"
+  # Write config (use printf to avoid echo interpreting backslash escapes)
+  printf '%s\n' "$config" > "$OUT"
 
   # Validate JSON
   if command -v python3 &>/dev/null; then
@@ -467,8 +496,12 @@ generate_client() {
 
   mkdir -p "$CLIENT_OUT_DIR"
 
-  local CLIENT_TEMPLATE
-  CLIENT_TEMPLATE=$(ls "$CLIENT_DIR/${SCENARIO}-"*.json 2>/dev/null | head -1)
+  local CLIENT_TEMPLATE=""
+
+  # Try local template first (only if repo is cloned)
+  if [ -n "$CLIENT_DIR" ] && [ -d "$CLIENT_DIR" ]; then
+    CLIENT_TEMPLATE=$(ls "$CLIENT_DIR/${SCENARIO}-"*.json 2>/dev/null | head -1) || true
+  fi
 
   # Download client template from GitHub if running standalone
   if [ -z "$CLIENT_TEMPLATE" ] || [ ! -f "$CLIENT_TEMPLATE" ]; then
@@ -487,7 +520,10 @@ generate_client() {
     if [ -n "$TPL_FILE" ]; then
       echo "  Downloading client template from GitHub..."
       CLIENT_TEMPLATE="$DEPLOY_DIR/client-template-${SCENARIO}.json"
-      curl -sL "${RAW_BASE}/${TPL_FILE}" -o "$CLIENT_TEMPLATE"
+      curl -sSL --retry 3 --retry-delay 2 "${RAW_BASE}/${TPL_FILE}" -o "$CLIENT_TEMPLATE" || {
+        echo -e "${YELLOW}WARNING: Failed to download client template — will generate minimal config${NC}"
+        CLIENT_TEMPLATE=""
+      }
     fi
   fi
 
@@ -524,7 +560,7 @@ generate_client() {
   client_config=${client_config//your-domain.com/${DOMAIN:-}}
 
   local OUT_FILE="$CLIENT_OUT_DIR/client-${SCENARIO}-$(date +%Y%m%d-%H%M%S).json"
-  echo "$client_config" > "$OUT_FILE"
+  printf '%s\n' "$client_config" > "$OUT_FILE"
 
   echo -e "  ${GREEN}Client config: $OUT_FILE${NC}"
   echo "  $(wc -c < "$OUT_FILE") bytes"
@@ -586,13 +622,13 @@ qr.print_ascii()
       echo "  Share link saved above."
     fi
 
-    echo "$share_link" > "$CLIENT_OUT_DIR/share-link-${SCENARIO}.txt"
+    printf '%s\n' "$share_link" > "$CLIENT_OUT_DIR/share-link-${SCENARIO}.txt"
   fi
 
   # For WireGuard: QR the JSON client config (base64 compressed)
   if $USE_WIREGUARD; then
     local latest_client
-    latest_client=$(ls -t "$CLIENT_OUT_DIR"/client-*.json 2>/dev/null | head -1)
+    latest_client=$(ls -t "$CLIENT_OUT_DIR"/client-*.json 2>/dev/null | head -1) || true
 
     if [ -f "$latest_client" ]; then
       # Compress client config for QR
@@ -611,7 +647,7 @@ print('xray://' + compressed)
       if [ -n "$encoded" ]; then
         echo -e "  ${CYAN}Client config (xray:// link — import into v2rayN/FocoX etc.):${NC}"
         echo -e "  ${GREEN}${encoded:0:80}...${NC}"
-        echo "$encoded" > "$CLIENT_OUT_DIR/xray-link-${SCENARIO}.txt"
+        printf '%s\n' "$encoded" > "$CLIENT_OUT_DIR/xray-link-${SCENARIO}.txt"
 
         # QR the compressed link
         if command -v qrencode &>/dev/null; then
