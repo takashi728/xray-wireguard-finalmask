@@ -1,0 +1,78 @@
+// =============================================================================
+// Scenario 7: WireGuard Multi-Peer + FinalMask header-custom (Server)
+//
+// A WireGuard server with multiple peers (clients), each with their own
+// private/public key pair. Combined with FinalMask header-custom for
+// traffic signature customization.
+//
+// v26.3.27 fixed multi-peer support in WireGuard inbound.
+//
+// Generate 2 key pairs:
+//   xray x25519  # Peer 1 keys
+//   xray x25519  # Peer 2 keys
+//   xray x25519  # Server key
+//
+// Replace all <...> placeholders with actual keys.
+// =============================================================================
+
+{
+  "log": {
+    "loglevel": "warning"
+  },
+
+  "inbounds": [
+    {
+      "listen": "0.0.0.0",
+      "port": 51820,
+      "protocol": "wireguard",
+      "tag": "wg-in",
+
+      "settings": {
+        "secretKey": "<SERVER_PRIVATE_KEY>",
+        "mtu": 1420,
+        "peers": [
+          {
+            "publicKey": "<PEER1_PUBLIC_KEY>",
+            "allowedIPs": ["10.0.0.2/32"]
+          },
+          {
+            "publicKey": "<PEER2_PUBLIC_KEY>",
+            "allowedIPs": ["10.0.0.3/32"]
+          }
+        ]
+      },
+
+      "streamSettings": {
+        "finalmask": {
+          "udp": [
+            {
+              "type": "header-custom",
+              "settings": {
+                // All peers must use matching client headers
+                "client": [
+                  {
+                    "rand": 6,
+                    "randRange": "0-255"
+                  }
+                ],
+                "server": [
+                  {
+                    "rand": 4,
+                    "randRange": "64-191"
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+
+  "outbounds": [
+    {
+      "protocol": "freedom",
+      "tag": "direct"
+    }
+  ]
+}

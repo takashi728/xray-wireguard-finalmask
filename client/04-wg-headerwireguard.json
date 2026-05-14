@@ -1,0 +1,76 @@
+// =============================================================================
+// Scenario 4: Real WireGuard + FinalMask header-wireguard (Client)
+//
+// Client connects with WireGuard + header-wireguard camouflage.
+// Each outgoing WireGuard packet is wrapped in a WireGuard-mimicking header
+// before transmission. DPI sees WireGuard handshake-looking packets that
+// actually contain real WireGuard inside.
+//
+// Replace <CLIENT_PRIVATE_KEY>, <SERVER_PUBLIC_KEY>, <SERVER_IP>.
+// =============================================================================
+
+{
+  "log": {
+    "loglevel": "warning"
+  },
+
+  "inbounds": [
+    {
+      "listen": "127.0.0.1",
+      "port": 10808,
+      "protocol": "socks",
+      "tag": "socks-in",
+      "settings": {
+        "udp": true
+      }
+    }
+  ],
+
+  "outbounds": [
+    {
+      "protocol": "wireguard",
+      "tag": "wg-out",
+
+      "settings": {
+        "secretKey": "<CLIENT_PRIVATE_KEY>",
+        "address": ["10.0.0.2/32"],
+        "mtu": 1420,
+        "domainStrategy": "ForceIP",
+
+        "peers": [
+          {
+            "endpoint": "<SERVER_IP>:51820",
+            "publicKey": "<SERVER_PUBLIC_KEY>",
+            "allowedIPs": ["0.0.0.0/0", "::/0"]
+          }
+        ]
+      },
+
+      "streamSettings": {
+        "finalmask": {
+          "udp": [
+            {
+              "type": "header-wireguard"
+              // Zero-config: adds WireGuard-like header around real WG packets
+            }
+          ]
+        }
+      }
+    },
+
+    {
+      "protocol": "freedom",
+      "tag": "direct"
+    }
+  ],
+
+  "routing": {
+    "rules": [
+      {
+        "type": "field",
+        "inboundTag": ["socks-in"],
+        "outboundTag": "wg-out"
+      }
+    ]
+  }
+}

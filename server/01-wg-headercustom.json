@@ -1,0 +1,83 @@
+// =============================================================================
+// Scenario 1: Real WireGuard + FinalMask header-custom (Server)
+//
+// A WireGuard inbound server that:
+//   - Listens on UDP port 51820 (standard WireGuard port)
+//   - Uses FinalMask UDP header-custom to prepend a 4-byte custom header
+//     to each packet, making traffic look non-standard
+//   - Implements FullCone NAT (v26.3.27+) for better connectivity
+//
+// The header-custom is configured with:
+//   - Server-side: 4 random bytes (0-255) prepended to each response packet
+//   - Client-side: 4 random bytes + 2 more bytes prepended to each request
+//
+// Key generation:
+//   xray x25519   (generates private key + public key)
+//
+// Replace <SERVER_PRIVATE_KEY>, <CLIENT_PUBLIC_KEY> with your actual keys.
+// =============================================================================
+
+{
+  "log": {
+    "loglevel": "warning"
+  },
+
+  "inbounds": [
+    {
+      "listen": "0.0.0.0",
+      "port": 51820,
+      "protocol": "wireguard",
+      "tag": "wg-inbound",
+
+      "settings": {
+        "secretKey": "<SERVER_PRIVATE_KEY>",
+        "mtu": 1420,
+        "peers": [
+          {
+            "publicKey": "<CLIENT_PUBLIC_KEY>",
+            "allowedIPs": ["10.0.0.2/32", "fd59:7153:2388:b5fd::2/128"]
+          }
+        ]
+      },
+
+      // FinalMask wraps the UDP socket with custom header camouflage
+      "streamSettings": {
+        "finalmask": {
+          "udp": [
+            {
+              "type": "header-custom",
+              "settings": {
+                // Server-side header: prepended to server→client packets
+                "server": [
+                  {
+                    "rand": 4,
+                    "randRange": "0-255"
+                  }
+                ],
+                // Client-side header: stripped from client→server packets
+                // The client MUST send this same header
+                "client": [
+                  {
+                    "rand": 4,
+                    "randRange": "0-255"
+                  },
+                  {
+                    "rand": 2,
+                    "randRange": "64-127"
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+
+  "outbounds": [
+    {
+      "protocol": "freedom",
+      "tag": "direct"
+    }
+  ]
+}

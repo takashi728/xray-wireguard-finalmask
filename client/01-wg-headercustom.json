@@ -1,0 +1,100 @@
+// =============================================================================
+// Scenario 1: Real WireGuard + FinalMask header-custom (Client)
+//
+// A WireGuard outbound client that:
+//   - Connects to server at <SERVER_IP>:51820
+//   - Uses matching FinalMask UDP header-custom (4+2 random bytes)
+//   - Creates local TUN with addresses 10.0.0.2 and fd59:...::2
+//   - Routes all traffic through the WireGuard tunnel
+//
+// Key generation:
+//   xray x25519   (generates private key + public key)
+//
+// Replace <CLIENT_PRIVATE_KEY>, <SERVER_PUBLIC_KEY>, <SERVER_IP> with actual values.
+// =============================================================================
+
+{
+  "log": {
+    "loglevel": "warning"
+  },
+
+  "inbounds": [
+    {
+      "listen": "127.0.0.1",
+      "port": 10808,
+      "protocol": "socks",
+      "tag": "socks-in",
+      "settings": {
+        "udp": true
+      }
+    }
+  ],
+
+  "outbounds": [
+    {
+      "protocol": "wireguard",
+      "tag": "wg-out",
+
+      "settings": {
+        "secretKey": "<CLIENT_PRIVATE_KEY>",
+        "address": ["10.0.0.2/32", "fd59:7153:2388:b5fd::2/128"],
+        "mtu": 1420,
+        "domainStrategy": "ForceIP",
+
+        "peers": [
+          {
+            "endpoint": "<SERVER_IP>:51820",
+            "publicKey": "<SERVER_PUBLIC_KEY>",
+            "allowedIPs": ["0.0.0.0/0", "::/0"]
+          }
+        ]
+      },
+
+      // FinalMask wraps outgoing UDP socket with matching camouflage
+      // The header order here is: client sends [4 rand bytes][2 rand bytes]
+      // server strips these, processes, then responds with [4 rand bytes]
+      "streamSettings": {
+        "finalmask": {
+          "udp": [
+            {
+              "type": "header-custom",
+              "settings": {
+                "client": [
+                  {
+                    "rand": 4,
+                    "randRange": "0-255"
+                  },
+                  {
+                    "rand": 2,
+                    "randRange": "64-127"
+                  }
+                ],
+                "server": [
+                  {
+                    "rand": 4,
+                    "randRange": "0-255"
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      }
+    },
+
+    {
+      "protocol": "freedom",
+      "tag": "direct"
+    }
+  ],
+
+  "routing": {
+    "rules": [
+      {
+        "type": "field",
+        "inboundTag": ["socks-in"],
+        "outboundTag": "wg-out"
+      }
+    ]
+  }
+}

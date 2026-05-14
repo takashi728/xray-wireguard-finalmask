@@ -1,0 +1,58 @@
+// =============================================================================
+// Scenario 4: Real WireGuard + FinalMask header-wireguard (Server)
+//
+// WireGuard inbound with FinalMask header-wireguard camouflage.
+// This wraps actual WireGuard packets inside another WireGuard-like header,
+// creating "WireGuard inside WireGuard-looking" traffic for deep obfuscation.
+//
+// header-wireguard is zero-config — it automatically prepends/strips
+// a WireGuard-style handshake/transport header to every UDP packet.
+// This makes DPI see double-stacked WireGuard patterns.
+//
+// Replace <SERVER_PRIVATE_KEY>, <CLIENT_PUBLIC_KEY> with actual keys.
+// =============================================================================
+
+{
+  "log": {
+    "loglevel": "warning"
+  },
+
+  "inbounds": [
+    {
+      "listen": "0.0.0.0",
+      "port": 51820,
+      "protocol": "wireguard",
+      "tag": "wg-in",
+
+      "settings": {
+        "secretKey": "<SERVER_PRIVATE_KEY>",
+        "mtu": 1420,
+        "peers": [
+          {
+            "publicKey": "<CLIENT_PUBLIC_KEY>",
+            "allowedIPs": ["10.0.0.2/32"]
+          }
+        ]
+      },
+
+      "streamSettings": {
+        "finalmask": {
+          "udp": [
+            {
+              "type": "header-wireguard"
+              // Zero-config: mimics WireGuard handshake/transport headers
+              // on top of actual WireGuard packets — DPI sees WG-in-WG
+            }
+          ]
+        }
+      }
+    }
+  ],
+
+  "outbounds": [
+    {
+      "protocol": "freedom",
+      "tag": "direct"
+    }
+  ]
+}

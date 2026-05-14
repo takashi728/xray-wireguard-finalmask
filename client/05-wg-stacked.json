@@ -1,0 +1,118 @@
+// =============================================================================
+// Scenario 5: WireGuard + Stacked FinalMask Layers (Client)
+//
+// Client-side with matching stacked FinalMask layers:
+//   1. header-custom (6 random bytes)
+//   2. noise (2 bursts: 256-1024 bytes + 64-512 bytes with random delays)
+//   3. salamander (Salamander password-based obfuscation)
+//
+// The layers must match the server order, but client/server sub-settings
+// within each layer are swapped (client sends what server receives).
+//
+// Replace <CLIENT_PRIVATE_KEY>, <SERVER_PUBLIC_KEY>, <SERVER_IP>,
+// <SALAMANDER_PASSWORD>.
+// =============================================================================
+
+{
+  "log": {
+    "loglevel": "warning"
+  },
+
+  "inbounds": [
+    {
+      "listen": "127.0.0.1",
+      "port": 10808,
+      "protocol": "socks",
+      "tag": "socks-in",
+      "settings": {
+        "udp": true
+      }
+    }
+  ],
+
+  "outbounds": [
+    {
+      "protocol": "wireguard",
+      "tag": "wg-out",
+
+      "settings": {
+        "secretKey": "<CLIENT_PRIVATE_KEY>",
+        "address": ["10.0.0.2/32"],
+        "mtu": 1420,
+        "domainStrategy": "ForceIP",
+
+        "peers": [
+          {
+            "endpoint": "<SERVER_IP>:51820",
+            "publicKey": "<SERVER_PUBLIC_KEY>",
+            "allowedIPs": ["0.0.0.0/0", "::/0"]
+          }
+        ]
+      },
+
+      "streamSettings": {
+        "finalmask": {
+          "udp": [
+            // Must match server order exactly
+            {
+              "type": "header-custom",
+              "settings": {
+                "client": [
+                  {
+                    "rand": 6,
+                    "randRange": "32-223"
+                  }
+                ],
+                "server": [
+                  {
+                    "rand": 6,
+                    "randRange": "64-191"
+                  }
+                ]
+              }
+            },
+            {
+              "type": "noise",
+              "settings": {
+                "reset": 0,
+                "noise": [
+                  {
+                    "rand": "256-1024",
+                    "randRange": "0-255",
+                    "delay": "5-20"
+                  },
+                  {
+                    "rand": "64-512",
+                    "randRange": "128-255",
+                    "delay": "10-30"
+                  }
+                ]
+              }
+            },
+            {
+              "type": "salamander",
+              "settings": {
+                "password": "<SALAMANDER_PASSWORD>"
+              }
+            }
+          ]
+        }
+      }
+    },
+
+    {
+      "protocol": "freedom",
+      "tag": "direct"
+    }
+  ],
+
+  "routing": {
+    "rules": [
+      {
+        "type": "field",
+        "inboundTag": ["socks-in"],
+        "outboundTag": "wg-out"
+      }
+    ]
+  }
+}

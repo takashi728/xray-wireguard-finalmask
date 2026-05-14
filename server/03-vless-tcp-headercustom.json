@@ -1,0 +1,130 @@
+// =============================================================================
+// Scenario 3: VLESS+TCP + FinalMask header-custom (Server)
+//
+// VLESS over RAW TCP with custom binary headers via FinalMask TCP layer.
+// Demonstrates the full header-custom configuration:
+//   - clients[n]:  headers the client sends (server strips these)
+//   - servers[n]:  headers the server sends (client strips these)
+//   - errors[n]:   headers sent during error conditions
+//
+// Each phase supports multiple tiers (nested arrays) with:
+//   - delay:       milliseconds to wait before sending
+//   - rand:        number of random bytes to prepend
+//   - randRange:   value range for random bytes (default 0-255)
+//   - type:        packet encoding: "array" | "str" | "hex" | "base64"
+//   - packet:      fixed binary data (conflicts with rand)
+//
+// Replace <UUID> with a real UUID.
+// =============================================================================
+
+{
+  "log": {
+    "loglevel": "warning"
+  },
+
+  "inbounds": [
+    {
+      "listen": "0.0.0.0",
+      "port": 443,
+      "protocol": "vless",
+      "tag": "vless-in",
+
+      "settings": {
+        "clients": [
+          {
+            "id": "<UUID>"
+          }
+        ],
+        "decryption": "none"
+      },
+
+      "streamSettings": {
+        "network": "raw",
+        "security": "tls",
+        "tlsSettings": {
+          "certificates": [
+            {
+              "certificateFile": "/etc/ssl/certs/server.crt",
+              "keyFile": "/etc/ssl/private/server.key"
+            }
+          ]
+        },
+
+        // FinalMask TCP header-custom: prepend structured bytes
+        "finalmask": {
+          "tcp": [
+            {
+              "type": "header-custom",
+              "settings": {
+                // ------ Client-to-Server header phases ------
+                // The client sends these in order; server strips them.
+                // Each inner array is a "tier" — tiers combine into one packet,
+                // between tiers is a flush boundary.
+                "clients": [
+                  // Tier 0: client sends immediately on connect
+                  [
+                    {
+                      "delay": 0,
+                      "rand": 8,
+                      "randRange": "0-255"
+                    }
+                  ],
+                  // Tier 1: client sends after a 50ms delay
+                  [
+                    {
+                      "delay": 50,
+                      "type": "hex",
+                      "packet": "deadbeef"
+                    },
+                    {
+                      "delay": 0,
+                      "rand": 4,
+                      "randRange": "128-255"
+                    }
+                  ]
+                ],
+
+                // ------ Server-to-Client header phases ------
+                // The server sends these in order; client strips them.
+                "servers": [
+                  // Tier 0: server sends immediately on accept
+                  [
+                    {
+                      "delay": 0,
+                      "type": "str",
+                      "packet": "OK"
+                    },
+                    {
+                      "delay": 0,
+                      "rand": 2,
+                      "randRange": "0-63"
+                    }
+                  ]
+                ],
+
+                // ------ Error header phases ------
+                // Sent by server when an error occurs (e.g. auth failure)
+                "errors": [
+                  [
+                    {
+                      "delay": 0,
+                      "type": "str",
+                      "packet": "ERR"
+                    }
+                  ]
+                ]
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+
+  "outbounds": [
+    {
+      "protocol": "freedom",
+      "tag": "direct"
+    }
+  ]
+}

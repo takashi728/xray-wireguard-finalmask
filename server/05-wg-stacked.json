@@ -1,0 +1,99 @@
+// =============================================================================
+// Scenario 5: WireGuard + Stacked FinalMask Layers (Server)
+//
+// Demonstrates stacking multiple FinalMask UDP camouflage layers:
+//   1. header-custom: prepend 6 random bytes (always merged into packet)
+//   2. noise:         send 2 bursts of random noise before payload
+//   3. salamander:    apply Hysteria2 Salamander obfuscation (encrypts payload)
+//
+// Stacking gives the strongest camouflage — each layer adds unpredictability.
+// The order in the "udp" array is the processing order.
+//
+// Replace <SERVER_PRIVATE_KEY>, <CLIENT_PUBLIC_KEY>, <SALAMANDER_PASSWORD>.
+// =============================================================================
+
+{
+  "log": {
+    "loglevel": "warning"
+  },
+
+  "inbounds": [
+    {
+      "listen": "0.0.0.0",
+      "port": 51820,
+      "protocol": "wireguard",
+      "tag": "wg-in",
+
+      "settings": {
+        "secretKey": "<SERVER_PRIVATE_KEY>",
+        "mtu": 1420,
+        "peers": [
+          {
+            "publicKey": "<CLIENT_PUBLIC_KEY>",
+            "allowedIPs": ["10.0.0.2/32"]
+          }
+        ]
+      },
+
+      "streamSettings": {
+        "finalmask": {
+          "udp": [
+            // Layer 1 (outermost): custom header prepended to all packets
+            {
+              "type": "header-custom",
+              "settings": {
+                "client": [
+                  {
+                    "rand": 6,
+                    "randRange": "32-223"
+                  }
+                ],
+                "server": [
+                  {
+                    "rand": 6,
+                    "randRange": "64-191"
+                  }
+                ]
+              }
+            },
+
+            // Layer 2: random noise bursts before data transmission
+            {
+              "type": "noise",
+              "settings": {
+                "reset": 0,
+                "noise": [
+                  {
+                    "rand": "256-1024",
+                    "randRange": "0-255",
+                    "delay": "5-20"
+                  },
+                  {
+                    "rand": "64-512",
+                    "randRange": "128-255",
+                    "delay": "10-30"
+                  }
+                ]
+              }
+            },
+
+            // Layer 3 (innermost): Salamander obfuscation from Hysteria2
+            {
+              "type": "salamander",
+              "settings": {
+                "password": "<SALAMANDER_PASSWORD>"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+
+  "outbounds": [
+    {
+      "protocol": "freedom",
+      "tag": "direct"
+    }
+  ]
+}

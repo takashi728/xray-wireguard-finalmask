@@ -1,0 +1,59 @@
+// =============================================================================
+// Scenario 6: WireGuard + FinalMask header-dtls (Server)
+//
+// WireGuard inbound with FinalMask header-dtls — DTLS 1.2 camouflage.
+// Every WireGuard UDP packet is prepended with a DTLS 1.2 record header,
+// making DPI classify the traffic as DTLS (encrypted UDP for WebRTC/voice).
+//
+// header-dtls is zero-config. Useful when you want traffic to appear as
+// real-time communication (WebRTC, VoIP) rather than VPN traffic.
+//
+// Replace <SERVER_PRIVATE_KEY>, <CLIENT_PUBLIC_KEY>.
+// =============================================================================
+
+{
+  "log": {
+    "loglevel": "warning"
+  },
+
+  "inbounds": [
+    {
+      "listen": "0.0.0.0",
+      "port": 51820,
+      "protocol": "wireguard",
+      "tag": "wg-in",
+
+      "settings": {
+        "secretKey": "<SERVER_PRIVATE_KEY>",
+        "mtu": 1420,
+        "peers": [
+          {
+            "publicKey": "<CLIENT_PUBLIC_KEY>",
+            "allowedIPs": ["10.0.0.2/32"]
+          }
+        ]
+      },
+
+      "streamSettings": {
+        "finalmask": {
+          "udp": [
+            {
+              "type": "header-dtls"
+              // Zero-config: adds DTLS 1.2 record header to each UDP packet
+              //   ContentType: 23 (application_data)
+              //   Version: 0xFEFD (DTLS 1.2)
+              //   Makes traffic look like encrypted WebRTC/DTLS
+            }
+          ]
+        }
+      }
+    }
+  ],
+
+  "outbounds": [
+    {
+      "protocol": "freedom",
+      "tag": "direct"
+    }
+  ]
+}

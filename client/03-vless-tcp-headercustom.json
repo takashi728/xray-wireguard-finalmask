@@ -1,0 +1,116 @@
+// =============================================================================
+// Scenario 3: VLESS+TCP + FinalMask header-custom (Client)
+//
+// Client-side config for VLESS over TCP with FinalMask header-custom.
+// The header-custom settings MUST match the server's configuration exactly.
+//
+// Replace <UUID> and <SERVER_IP> with actual values.
+// =============================================================================
+
+{
+  "log": {
+    "loglevel": "warning"
+  },
+
+  "inbounds": [
+    {
+      "listen": "127.0.0.1",
+      "port": 10808,
+      "protocol": "socks",
+      "tag": "socks-in",
+      "settings": {
+        "udp": true
+      }
+    }
+  ],
+
+  "outbounds": [
+    {
+      "protocol": "vless",
+      "tag": "vless-out",
+
+      "settings": {
+        "vnext": [
+          {
+            "address": "<SERVER_IP>",
+            "port": 443,
+            "users": [
+              {
+                "id": "<UUID>",
+                "encryption": "none"
+              }
+            ]
+          }
+        ]
+      },
+
+      "streamSettings": {
+        "network": "raw",
+        "security": "tls",
+        "tlsSettings": {
+          "serverName": "your-domain.com"
+        },
+
+        "finalmask": {
+          "tcp": [
+            {
+              "type": "header-custom",
+              "settings": {
+                "clients": [
+                  [
+                    {
+                      "delay": 0,
+                      "rand": 8,
+                      "randRange": "0-255"
+                    }
+                  ],
+                  [
+                    {
+                      "delay": 50,
+                      "type": "hex",
+                      "packet": "deadbeef"
+                    },
+                    {
+                      "delay": 0,
+                      "rand": 4,
+                      "randRange": "128-255"
+                    }
+                  ]
+                ],
+                "servers": [
+                  [
+                    {
+                      "delay": 0,
+                      "type": "str",
+                      "packet": "OK"
+                    },
+                    {
+                      "delay": 0,
+                      "rand": 2,
+                      "randRange": "0-63"
+                    }
+                  ]
+                ]
+              }
+            }
+          ]
+        }
+      }
+    },
+
+    {
+      "protocol": "freedom",
+      "tag": "direct"
+    }
+  ],
+
+  "routing": {
+    "rules": [
+      {
+        "type": "field",
+        "inboundTag": ["socks-in"],
+        "outboundTag": "vless-out"
+      }
+    ]
+  }
+}

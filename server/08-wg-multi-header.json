@@ -1,0 +1,304 @@
+// =============================================================================
+// Scenario 8: WireGuard Multi-Inbound — Strong Obfuscation (Server)
+//
+// Single server with FOUR WireGuard inbounds, each using a different
+// STRONG obfuscation strategy. No weak approximations — every inbound
+// uses real payload encryption or stacked camouflage layers.
+//
+//   Port 51820 → header-wechat + noise      (WeChat look, random bursts)
+//   Port 51821 → mkcp-aes128gcm + header-custom (AES-128-GCM → Shadowsocks AEAD equivalent)
+//   Port 51822 → salamander + noise         (Hysteria2 obfuscation + random noise)
+//   Port 51823 → sudoku + header-custom     (Sudoku table crypto + custom binary header)
+//
+// Generate keys (4 pairs + 4 passwords):
+//   xray x25519   # Server 1 key  (→ SERVER1_PRIVKEY)
+//   xray x25519   # Peer 1A key   (→ PEER1A_PUBKEY)
+//   xray x25519   # Server 2 key  (→ SERVER2_PRIVKEY)
+//   xray x25519   # Peer 2A key   (→ PEER2A_PUBKEY)
+//   xray x25519   # Server 3 key  (→ SERVER3_PRIVKEY)
+//   xray x25519   # Peer 3A key   (→ PEER3A_PUBKEY)
+//   xray x25519   # Server 4 key  (→ SERVER4_PRIVKEY)
+//   xray x25519   # Peer 4A key   (→ PEER4A_PUBKEY)
+//
+// Passwords (use xray x25519 output or any strong string):
+//   PASSWORD_AES   — for mkcp-aes128gcm
+//   PASSWORD_SALAM — for salamander
+//   PASSWORD_SUDOK — for sudoku
+// =============================================================================
+
+{
+  "log": {
+    "loglevel": "warning"
+  },
+
+  "inbounds": [
+
+    // ==================================================================
+    // INBOUND 1 : port 51820 — header-wechat + noise
+    //
+    // WeChat Video call header + random noise bursts.
+    // DPI sees WeChat real-time media traffic with intermittent
+    // noise bursts that break traffic pattern analysis.
+    // ==================================================================
+    {
+      "listen": "0.0.0.0",
+      "port": 51820,
+      "protocol": "wireguard",
+      "tag": "wg-wechat-noise",
+
+      "settings": {
+        "secretKey": "<SERVER1_PRIVATE_KEY>",
+        "mtu": 1420,
+        "peers": [
+          {
+            "publicKey": "<PEER1A_PUBLIC_KEY>",
+            "allowedIPs": ["10.0.0.2/32"]
+          }
+        ]
+      },
+
+      "streamSettings": {
+        "finalmask": {
+          "udp": [
+            // Layer 1 (outer): WeChat Video header — zero config, always merged
+            {
+              "type": "header-wechat"
+            },
+            // Layer 2 (inner): random noise bursts between data packets
+            // Breaks any DPI that learns to ignore WeChat headers
+            {
+              "type": "noise",
+              "settings": {
+                "reset": 0,
+                "noise": [
+                  {
+                    "rand": "128-2048",
+                    "randRange": "0-255",
+                    "delay": "3-15"
+                  },
+                  {
+                    "rand": "64-512",
+                    "randRange": "128-255",
+                    "delay": "8-25"
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      }
+    },
+
+    // ==================================================================
+    // INBOUND 2 : port 51821 — mkcp-aes128gcm + header-custom
+    //
+    // AES-128-GCM encrypts the entire payload, then a custom binary
+    // header is prepended. This IS the Shadowsocks AEAD equivalent:
+    //   [random header][AES-128-GCM(nonce + ciphertext + tag)]
+    //
+    // Why this beats header-custom alone:
+    //   - Payload is ENCRYPTED, not just wrapped (header-custom only wraps)
+    //   - AES-128-GCM provides authentication (tamper detection)
+    //   - Custom header adds second layer of unpredictability
+    // ==================================================================
+    {
+      "listen": "0.0.0.0",
+      "port": 51821,
+      "protocol": "wireguard",
+      "tag": "wg-aes128gcm-custom",
+
+      "settings": {
+        "secretKey": "<SERVER2_PRIVATE_KEY>",
+        "mtu": 1420,
+        "peers": [
+          {
+            "publicKey": "<PEER2A_PUBLIC_KEY>",
+            "allowedIPs": ["10.0.1.2/32"]
+          }
+        ]
+      },
+
+      "streamSettings": {
+        "finalmask": {
+          "udp": [
+            // Layer 1 (outer): custom binary header — unpredictable signature
+            {
+              "type": "header-custom",
+              "settings": {
+                "client": [
+                  {
+                    "rand": 12,
+                    "randRange": "0-255"
+                  }
+                ],
+                "server": [
+                  {
+                    "rand": 8,
+                    "randRange": "64-191"
+                  }
+                ]
+              }
+            },
+            // Layer 2 (inner): AES-128-GCM encrypts the payload
+            // This is the Shadowsocks AEAD equivalent — authenticated encryption
+            {
+              "type": "mkcp-aes128gcm",
+              "settings": {
+                "password": "<PASSWORD_AES>"
+              }
+            }
+          ]
+        }
+      }
+    },
+
+    // ==================================================================
+    // INBOUND 3 : port 51822 — salamander + noise
+    //
+    // Hysteria2 Salamander obfuscation (XOR-based stream cipher) + noise.
+    // Salamander encrypts payload byte-by-byte using a seeded keystream,
+    // making traffic indistinguishable from random noise.
+    // Adding real noise bursts on top makes replay/correlation attacks
+    // significantly harder.
+    // ==================================================================
+    {
+      "listen": "0.0.0.0",
+      "port": 51822,
+      "protocol": "wireguard",
+      "tag": "wg-salamander-noise",
+
+      "settings": {
+        "secretKey": "<SERVER3_PRIVATE_KEY>",
+        "mtu": 1420,
+        "peers": [
+          {
+            "publicKey": "<PEER3A_PUBLIC_KEY>",
+            "allowedIPs": ["10.0.2.2/32"]
+          }
+        ]
+      },
+
+      "streamSettings": {
+        "finalmask": {
+          "udp": [
+            // Layer 1 (outer): random noise bursts
+            {
+              "type": "noise",
+              "settings": {
+                "reset": 0,
+                "noise": [
+                  {
+                    "rand": "512-4096",
+                    "randRange": "0-255",
+                    "delay": "5-30"
+                  }
+                ]
+              }
+            },
+            // Layer 2 (inner): Salamander obfuscation — XOR keystream
+            // Output is indistinguishable from random data
+            {
+              "type": "salamander",
+              "settings": {
+                "password": "<PASSWORD_SALAM>"
+              }
+            }
+          ]
+        }
+      }
+    },
+
+    // ==================================================================
+    // INBOUND 4 : port 51823 — sudoku + header-custom
+    //
+    // Sudoku table-based substitution cipher + custom binary header.
+    // Sudoku uses a configurable 256-byte lookup table derived from
+    // a password, substituting each byte. Combined with a custom
+    // binary header for a unique multi-layer signature.
+    //
+    // Supports:
+    //   - customTable:  single 256-char ASCII table for substitution
+    //   - customTables: multiple tables for rotation
+    //   - paddingMin/Max: random padding to hide true packet size
+    // ==================================================================
+    {
+      "listen": "0.0.0.0",
+      "port": 51823,
+      "protocol": "wireguard",
+      "tag": "wg-sudoku-custom",
+
+      "settings": {
+        "secretKey": "<SERVER4_PRIVATE_KEY>",
+        "mtu": 1420,
+        "peers": [
+          {
+            "publicKey": "<PEER4A_PUBLIC_KEY>",
+            "allowedIPs": ["10.0.3.2/32"]
+          }
+        ]
+      },
+
+      "streamSettings": {
+        "finalmask": {
+          "udp": [
+            // Layer 1 (outer): custom binary header with random bytes
+            {
+              "type": "header-custom",
+              "settings": {
+                "client": [
+                  {
+                    "rand": 6,
+                    "randRange": "32-223"
+                  },
+                  {
+                    "type": "hex",
+                    "packet": "cafebabe"
+                  }
+                ],
+                "server": [
+                  {
+                    "rand": 4,
+                    "randRange": "64-191"
+                  }
+                ]
+              }
+            },
+            // Layer 2 (inner): Sudoku substitution cipher
+            // Each payload byte is substituted through the lookup table
+            {
+              "type": "sudoku",
+              "settings": {
+                "password": "<PASSWORD_SUDOK>",
+                "ascii": "",
+                "paddingMin": 4,
+                "paddingMax": 32
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+
+  "outbounds": [
+    {
+      "protocol": "freedom",
+      "tag": "direct"
+    }
+  ],
+
+  "routing": {
+    "rules": [
+      {
+        "type": "field",
+        "inboundTag": [
+          "wg-wechat-noise",
+          "wg-aes128gcm-custom",
+          "wg-salamander-noise",
+          "wg-sudoku-custom"
+        ],
+        "outboundTag": "direct"
+      }
+    ]
+  }
+}

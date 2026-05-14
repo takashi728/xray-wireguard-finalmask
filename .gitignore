@@ -1,0 +1,14 @@
+# Generated client configs
+scripts/clients/
+
+# Deployment state
+/opt/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Editor
+*.swp
+*.swo
+*~

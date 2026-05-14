@@ -1,0 +1,91 @@
+// =============================================================================
+// Scenario 2: VLESS+mKCP disguised as WireGuard via FinalMask header-wireguard (Client)
+//
+// Client-side config. Connects to the VLESS+mKCP server while all UDP traffic
+// is automatically disguised as WireGuard packets via FinalMask header-wireguard.
+//
+// The SOCKS inbound on port 10808 allows applications to proxy through this tunnel.
+//
+// Replace <UUID> and <SERVER_IP> with actual values.
+// =============================================================================
+
+{
+  "log": {
+    "loglevel": "warning"
+  },
+
+  "inbounds": [
+    {
+      "listen": "127.0.0.1",
+      "port": 10808,
+      "protocol": "socks",
+      "tag": "socks-in",
+      "settings": {
+        "udp": true
+      }
+    }
+  ],
+
+  "outbounds": [
+    {
+      "protocol": "vless",
+      "tag": "vless-out",
+
+      "settings": {
+        "vnext": [
+          {
+            "address": "<SERVER_IP>",
+            "port": 51820,
+            "users": [
+              {
+                "id": "<UUID>",
+                "encryption": "none"
+              }
+            ]
+          }
+        ]
+      },
+
+      "streamSettings": {
+        "network": "kcp",
+        "kcpSettings": {
+          "mtu": 1350,
+          "tti": 50,
+          "uplinkCapacity": 100,
+          "downlinkCapacity": 100,
+          "congestion": false,
+          "readBufferSize": 2,
+          "writeBufferSize": 2,
+          "header": {
+            "type": "none"    // FinalMask handles all headers
+          }
+        },
+
+        // FinalMask: make all mKCP UDP packets look exactly like WireGuard
+        "finalmask": {
+          "udp": [
+            {
+              "type": "header-wireguard"
+              // Zero-config WireGuard mimicry
+            }
+          ]
+        }
+      }
+    },
+
+    {
+      "protocol": "freedom",
+      "tag": "direct"
+    }
+  ],
+
+  "routing": {
+    "rules": [
+      {
+        "type": "field",
+        "inboundTag": ["socks-in"],
+        "outboundTag": "vless-out"
+      }
+    ]
+  }
+}

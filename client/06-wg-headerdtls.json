@@ -1,0 +1,73 @@
+// =============================================================================
+// Scenario 6: WireGuard + FinalMask header-dtls (Client)
+//
+// Client-side WireGuard with DTLS 1.2 header camouflage.
+// Outgoing WireGuard packets appear as DTLS application data records.
+//
+// Replace <CLIENT_PRIVATE_KEY>, <SERVER_PUBLIC_KEY>, <SERVER_IP>.
+// =============================================================================
+
+{
+  "log": {
+    "loglevel": "warning"
+  },
+
+  "inbounds": [
+    {
+      "listen": "127.0.0.1",
+      "port": 10808,
+      "protocol": "socks",
+      "tag": "socks-in",
+      "settings": {
+        "udp": true
+      }
+    }
+  ],
+
+  "outbounds": [
+    {
+      "protocol": "wireguard",
+      "tag": "wg-out",
+
+      "settings": {
+        "secretKey": "<CLIENT_PRIVATE_KEY>",
+        "address": ["10.0.0.2/32"],
+        "mtu": 1420,
+        "domainStrategy": "ForceIP",
+
+        "peers": [
+          {
+            "endpoint": "<SERVER_IP>:51820",
+            "publicKey": "<SERVER_PUBLIC_KEY>",
+            "allowedIPs": ["0.0.0.0/0", "::/0"]
+          }
+        ]
+      },
+
+      "streamSettings": {
+        "finalmask": {
+          "udp": [
+            {
+              "type": "header-dtls"
+            }
+          ]
+        }
+      }
+    },
+
+    {
+      "protocol": "freedom",
+      "tag": "direct"
+    }
+  ],
+
+  "routing": {
+    "rules": [
+      {
+        "type": "field",
+        "inboundTag": ["socks-in"],
+        "outboundTag": "wg-out"
+      }
+    ]
+  }
+}

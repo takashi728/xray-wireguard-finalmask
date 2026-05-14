@@ -1,0 +1,270 @@
+// =============================================================================
+// Scenario 8: WireGuard Multi-Inbound — Strong Obfuscation (Client)
+//
+// Client connects to any of the 4 server inbounds. Each outbound uses
+// matching strong obfuscation. Switch between them via routing rules
+// or comment/uncomment to test different camouflage strategies.
+//
+//   Outbound 1 (port 51820): header-wechat + noise
+//   Outbound 2 (port 51821): mkcp-aes128gcm + header-custom (SS AEAD equivalent)
+//   Outbound 3 (port 51822): salamander + noise
+//   Outbound 4 (port 51823): sudoku + header-custom
+//
+// The SOCKS inbound on port 10808 routes to the active outbound.
+// Default: outbound 2 (AES-128-GCM — strongest SS-like obfuscation).
+//
+// Replace: <CLIENT1_PRIVKEY>, <SERVER1_PUBKEY>, <CLIENT2_PRIVKEY>, <SERVER2_PUBKEY>,
+//          <CLIENT3_PRIVKEY>, <SERVER3_PUBKEY>, <CLIENT4_PRIVKEY>, <SERVER4_PUBKEY>,
+//          <SERVER_IP>, <PASSWORD_AES>, <PASSWORD_SALAM>, <PASSWORD_SUDOK>
+// =============================================================================
+
+{
+  "log": {
+    "loglevel": "warning"
+  },
+
+  "inbounds": [
+    {
+      "listen": "127.0.0.1",
+      "port": 10808,
+      "protocol": "socks",
+      "tag": "socks-in",
+      "settings": {
+        "udp": true
+      }
+    }
+  ],
+
+  "outbounds": [
+
+    // ==================================================================
+    // OUTBOUND 1 : port 51820 — header-wechat + noise
+    // ==================================================================
+    {
+      "protocol": "wireguard",
+      "tag": "wg-wechat-noise",
+
+      "settings": {
+        "secretKey": "<CLIENT1_PRIVATE_KEY>",
+        "address": ["10.0.0.2/32"],
+        "mtu": 1420,
+        "domainStrategy": "ForceIP",
+
+        "peers": [
+          {
+            "endpoint": "<SERVER_IP>:51820",
+            "publicKey": "<SERVER1_PUBLIC_KEY>",
+            "allowedIPs": ["0.0.0.0/0", "::/0"]
+          }
+        ]
+      },
+
+      "streamSettings": {
+        "finalmask": {
+          "udp": [
+            {
+              "type": "header-wechat"
+            },
+            {
+              "type": "noise",
+              "settings": {
+                "reset": 0,
+                "noise": [
+                  {
+                    "rand": "128-2048",
+                    "randRange": "0-255",
+                    "delay": "3-15"
+                  },
+                  {
+                    "rand": "64-512",
+                    "randRange": "128-255",
+                    "delay": "8-25"
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      }
+    },
+
+    // ==================================================================
+    // OUTBOUND 2 : port 51821 — mkcp-aes128gcm + header-custom
+    // Shadowsocks AEAD equivalent: AES-128-GCM encrypts payload
+    // ==================================================================
+    {
+      "protocol": "wireguard",
+      "tag": "wg-aes128gcm-custom",
+
+      "settings": {
+        "secretKey": "<CLIENT2_PRIVATE_KEY>",
+        "address": ["10.0.1.2/32"],
+        "mtu": 1420,
+        "domainStrategy": "ForceIP",
+
+        "peers": [
+          {
+            "endpoint": "<SERVER_IP>:51821",
+            "publicKey": "<SERVER2_PUBLIC_KEY>",
+            "allowedIPs": ["0.0.0.0/0", "::/0"]
+          }
+        ]
+      },
+
+      "streamSettings": {
+        "finalmask": {
+          "udp": [
+            {
+              "type": "header-custom",
+              "settings": {
+                "client": [
+                  {
+                    "rand": 12,
+                    "randRange": "0-255"
+                  }
+                ],
+                "server": [
+                  {
+                    "rand": 8,
+                    "randRange": "64-191"
+                  }
+                ]
+              }
+            },
+            {
+              "type": "mkcp-aes128gcm",
+              "settings": {
+                "password": "<PASSWORD_AES>"
+              }
+            }
+          ]
+        }
+      }
+    },
+
+    // ==================================================================
+    // OUTBOUND 3 : port 51822 — salamander + noise
+    // ==================================================================
+    {
+      "protocol": "wireguard",
+      "tag": "wg-salamander-noise",
+
+      "settings": {
+        "secretKey": "<CLIENT3_PRIVATE_KEY>",
+        "address": ["10.0.2.2/32"],
+        "mtu": 1420,
+        "domainStrategy": "ForceIP",
+
+        "peers": [
+          {
+            "endpoint": "<SERVER_IP>:51822",
+            "publicKey": "<SERVER3_PUBLIC_KEY>",
+            "allowedIPs": ["0.0.0.0/0", "::/0"]
+          }
+        ]
+      },
+
+      "streamSettings": {
+        "finalmask": {
+          "udp": [
+            {
+              "type": "noise",
+              "settings": {
+                "reset": 0,
+                "noise": [
+                  {
+                    "rand": "512-4096",
+                    "randRange": "0-255",
+                    "delay": "5-30"
+                  }
+                ]
+              }
+            },
+            {
+              "type": "salamander",
+              "settings": {
+                "password": "<PASSWORD_SALAM>"
+              }
+            }
+          ]
+        }
+      }
+    },
+
+    // ==================================================================
+    // OUTBOUND 4 : port 51823 — sudoku + header-custom
+    // ==================================================================
+    {
+      "protocol": "wireguard",
+      "tag": "wg-sudoku-custom",
+
+      "settings": {
+        "secretKey": "<CLIENT4_PRIVATE_KEY>",
+        "address": ["10.0.3.2/32"],
+        "mtu": 1420,
+        "domainStrategy": "ForceIP",
+
+        "peers": [
+          {
+            "endpoint": "<SERVER_IP>:51823",
+            "publicKey": "<SERVER4_PUBLIC_KEY>",
+            "allowedIPs": ["0.0.0.0/0", "::/0"]
+          }
+        ]
+      },
+
+      "streamSettings": {
+        "finalmask": {
+          "udp": [
+            {
+              "type": "header-custom",
+              "settings": {
+                "client": [
+                  {
+                    "rand": 6,
+                    "randRange": "32-223"
+                  },
+                  {
+                    "type": "hex",
+                    "packet": "cafebabe"
+                  }
+                ],
+                "server": [
+                  {
+                    "rand": 4,
+                    "randRange": "64-191"
+                  }
+                ]
+              }
+            },
+            {
+              "type": "sudoku",
+              "settings": {
+                "password": "<PASSWORD_SUDOK>",
+                "ascii": "",
+                "paddingMin": 4,
+                "paddingMax": 32
+              }
+            }
+          ]
+        }
+      }
+    },
+
+    {
+      "protocol": "freedom",
+      "tag": "direct"
+    }
+  ],
+
+  "routing": {
+    "rules": [
+      {
+        "type": "field",
+        "inboundTag": ["socks-in"],
+        "outboundTag": "wg-aes128gcm-custom"
+        // Change to any of: "wg-wechat-noise", "wg-salamander-noise", "wg-sudoku-custom"
+      }
+    ]
+  }
+}

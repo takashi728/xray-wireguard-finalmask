@@ -1,0 +1,268 @@
+// =============================================================================
+// FinalMask Header Types — Quick Reference
+//
+// This file shows all available header-* types for both TCP and UDP FinalMask.
+// Copy the relevant "finalmask" block into your streamSettings.
+// =============================================================================
+
+// ============================
+// UDP header-* Types
+// ============================
+
+// --- header-custom: Custom binary headers (configurable) ---
+// "finalmask": {
+//   "udp": [
+//     {
+//       "type": "header-custom",
+//       "settings": {
+//         "client": [
+//           {
+//             "rand": 8,                // 8 random bytes (0..randRange)
+//             "randRange": "0-255"      // byte value range
+//             // OR: "type": "hex", "packet": "deadbeef"  (fixed data)
+//           }
+//         ],
+//         "server": [
+//           {
+//             "rand": 4,
+//             "randRange": "0-255"
+//           }
+//         ]
+//       }
+//     }
+//   ]
+// }
+
+// --- header-dns: DNS query mimicry (configurable) ---
+// "finalmask": {
+//   "udp": [
+//     {
+//       "type": "header-dns",
+//       "settings": {
+//         "domain": "www.example.com"   // domain for DNS query header
+//       }
+//     }
+//   ]
+// }
+
+// --- header-dtls: DTLS 1.2 mimicry (zero-config) ---
+// "finalmask": {
+//   "udp": [
+//     { "type": "header-dtls" }
+//   ]
+// }
+
+// --- header-srtp: SRTP mimicry (zero-config) ---
+// Looks like FaceTime/video call traffic
+// "finalmask": {
+//   "udp": [
+//     { "type": "header-srtp" }
+//   ]
+// }
+
+// --- header-utp: uTP/BitTorrent mimicry (zero-config) ---
+// "finalmask": {
+//   "udp": [
+//     { "type": "header-utp" }
+//   ]
+// }
+
+// --- header-wechat: WeChat Video mimicry (zero-config) ---
+// "finalmask": {
+//   "udp": [
+//     { "type": "header-wechat" }
+//   ]
+// }
+
+// --- header-wireguard: WireGuard packet mimicry (zero-config) ---
+// Makes UDP packets look like WireGuard handshake/transport
+// "finalmask": {
+//   "udp": [
+//     { "type": "header-wireguard" }
+//   ]
+// }
+
+// --- mkcp-original: Legacy mKCP simple obfuscation (zero-config) ---
+// For compatibility with older mKCP servers
+// "finalmask": {
+//   "udp": [
+//     { "type": "mkcp-original" }
+//   ]
+// }
+
+// --- mkcp-aes128gcm: AES-128-GCM obfuscation (configurable) ---
+// "finalmask": {
+//   "udp": [
+//     {
+//       "type": "mkcp-aes128gcm",
+//       "settings": {
+//         "password": "your-seed-password"
+//       }
+//     }
+//   ]
+// }
+
+// --- noise: Random noise before payload (configurable) ---
+// "finalmask": {
+//   "udp": [
+//     {
+//       "type": "noise",
+//       "settings": {
+//         "reset": 0,
+//         "noise": [
+//           {
+//             "rand": "256-1024",       // random byte count range
+//             "randRange": "0-255",     // byte value range
+//             "delay": "5-20"           // delay in ms after this burst
+//           },
+//           {
+//             "type": "hex",            // fixed data instead of random
+//             "packet": "cafebabe",
+//             "delay": "10-30"
+//           }
+//         ]
+//       }
+//     }
+//   ]
+// }
+
+// --- salamander: Hysteria2 obfuscation (configurable) ---
+// "finalmask": {
+//   "udp": [
+//     {
+//       "type": "salamander",
+//       "settings": {
+//         "password": "your-salamander-password"
+//       }
+//     }
+//   ]
+// }
+
+// --- sudoku: Sudoku-based obfuscation (configurable) ---
+// "finalmask": {
+//   "udp": [
+//     {
+//       "type": "sudoku",
+//       "settings": {
+//         "password": "your-password",
+//         "ascii": "",
+//         "paddingMin": 0,
+//         "paddingMax": 0
+//       }
+//     }
+//   ]
+// }
+
+// --- xdns: DNS TXT query tunneling (configurable) ---
+// Requires: server on port 53, NS record pointed to server
+// "finalmask": {
+//   "udp": [
+//     {
+//       "type": "xdns",
+//       "settings": {
+//         "domain": "t.example.com"     // NS record must point here
+//       }
+//     }
+//   ]
+// }
+
+// --- xicmp: ICMP tunneling (configurable) ---
+// Requires: CAP_NET_RAW, must be outermost layer
+// "finalmask": {
+//   "udp": [
+//     {
+//       "type": "xicmp",
+//       "settings": {
+//         "listenIp": "0.0.0.0",
+//         "id": 0
+//       }
+//     }
+//   ]
+// }
+
+// ============================
+// TCP header-* Types
+// ============================
+
+// --- header-custom: Custom binary headers (configurable) ---
+// Supports three phases: clients (C→S), servers (S→C), errors
+// "finalmask": {
+//   "tcp": [
+//     {
+//       "type": "header-custom",
+//       "settings": {
+//         "clients": [
+//           [
+//             { "delay": 0, "rand": 4, "randRange": "0-255" }
+//           ],
+//           [
+//             { "delay": 50, "type": "hex", "packet": "deadbeef" },
+//             { "delay": 0, "type": "str", "packet": "hello" }
+//           ]
+//         ],
+//         "servers": [
+//           [
+//             { "delay": 0, "rand": 8, "randRange": "0-255" }
+//           ]
+//         ],
+//         "errors": [
+//           [
+//             { "delay": 0, "type": "str", "packet": "ERR" }
+//           ]
+//         ]
+//       }
+//     }
+//   ]
+// }
+
+// --- fragment: TCP packet fragmentation (configurable) ---
+// Splits TCP packets into smaller fragments for obfuscation
+// "finalmask": {
+//   "tcp": [
+//     {
+//       "type": "fragment",
+//       "settings": {
+//         "packets": "tlshello",        // packet type to fragment
+//         "length": "100-200",          // fragment size range
+//         "delay": "10-20",             // delay between fragments (ms)
+//         "maxSplit": "3-6"             // max number of splits
+//       }
+//     }
+//   ]
+// }
+
+// --- sudoku: Sudoku-based obfuscation (configurable) ---
+// "finalmask": {
+//   "tcp": [
+//     {
+//       "type": "sudoku",
+//       "settings": {
+//         "password": "your-password",
+//         "ascii": "",
+//         "paddingMin": 0,
+//         "paddingMax": 0
+//       }
+//     }
+//   ]
+// }
+
+// ============================
+// quicParams: QUIC Tuning
+// ============================
+// Applies to XHTTP H3 and Hysteria transports
+// "finalmask": {
+//   "quicParams": {
+//     "congestion": "bbr",              // reno | bbr | brutal | force-brutal
+//     "debug": false,
+//     "brutalUp": "60 mbps",
+//     "brutalDown": 0,
+//     "udpHop": {
+//       "ports": "20000-50000",         // port hopping range
+//       "interval": "5-10"             // hopping interval (seconds)
+//     },
+//     "maxIdleTimeout": 30,
+//     "keepAlivePeriod": 0,
+//     "disablePathMTUDiscovery": false,
+//     "maxIncomingStreams": 1024
+//   }
+// }
