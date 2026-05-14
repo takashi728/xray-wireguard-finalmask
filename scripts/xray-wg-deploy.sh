@@ -680,6 +680,23 @@ main() {
     exit 1
   fi
 
+  # Pipe detection — curl|bash kills stdin, read() fails silently
+  if [ ! -t 0 ] && [ -z "${1:-}" ]; then
+    echo -e "${RED}Cannot run interactively through a pipe.${NC}"
+    echo ""
+    echo "  Fix — use one of:"
+    echo ""
+    echo -e "  ${GREEN}# Option A: download first, then run${NC}"
+    echo "  curl -sLo deploy.sh https://raw.githubusercontent.com/takashi728/xray-wireguard-finalmask/main/scripts/xray-wg-deploy.sh"
+    echo "  sudo bash deploy.sh"
+    echo ""
+    echo -e "  ${GREEN}# Option B: pass scenario number directly (non-interactive)${NC}"
+    echo "  curl -sL https://raw.githubusercontent.com/takashi728/xray-wireguard-finalmask/main/scripts/xray-wg-deploy.sh | sudo bash -s -- 08"
+    echo ""
+    echo "  Scenarios: 01-08 (see README)"
+    exit 1
+  fi
+
   banner
 
   # Scenario selection

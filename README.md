@@ -3,13 +3,15 @@
 Xray-core v26.3.27+ supports combining **WireGuard** protocol with **FinalMask** transport camouflage,
 giving stronger obfuscation than any other WireGuard variant.
 
-## 🚀 Quick Deploy (one command)
+## 🚀 Quick Deploy
 
 ```bash
-# On your VPS (as root):
-curl -sL https://...raw.../xray-wg-deploy.sh | sudo bash
+# Option A — interactive menu:
+curl -sLo deploy.sh https://raw.githubusercontent.com/takashi728/xray-wireguard-finalmask/main/scripts/xray-wg-deploy.sh
+sudo bash deploy.sh
 
-# Interactive menu → pick scenario → auto-deploy → QR code appears
+# Option B — non-interactive (scenario 08, strongest):
+curl -sL https://raw.githubusercontent.com/takashi728/xray-wireguard-finalmask/main/scripts/xray-wg-deploy.sh | sudo bash -s -- 08
 ```
 
 | Script | Purpose |
