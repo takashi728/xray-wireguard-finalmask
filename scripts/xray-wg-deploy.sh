@@ -305,15 +305,17 @@ install_xray() {
   local ARCH
   ARCH=$(uname -m)
   case "$ARCH" in
-    x86_64)  ARCH="amd64" ;;
+    x86_64)  ARCH="64" ;;
     aarch64) ARCH="arm64-v8a" ;;
-    armv7l)  ARCH="armv7a" ;;
+    armv7l)  ARCH="arm32-v7a" ;;
+    armv6l)  ARCH="arm32-v6" ;;
     *) echo -e "${RED}Unsupported arch: ${ARCH}${NC}"; exit 1 ;;
   esac
 
   local OS
   OS=$(uname -s | tr '[:upper:]' '[:lower:]')
 
+  # Xray release uses: Xray-linux-64.zip (not Xray-linux-amd64.zip)
   local URL="https://github.com/XTLS/Xray-core/releases/download/${XRAY_VERSION}/Xray-${OS}-${ARCH}.zip"
   local TMP_DIR
   TMP_DIR=$(mktemp -d)
@@ -327,12 +329,9 @@ install_xray() {
   cp "$TMP_DIR/xray/xray" /usr/local/bin/xray
   chmod +x /usr/local/bin/xray
 
-  # Download geo files
-  echo "  Downloading geo files..."
-  curl -sL "https://github.com/XTLS/Xray-core/releases/download/${XRAY_VERSION}/geoip.dat" \
-    -o /usr/local/share/xray/geoip.dat 2>/dev/null || true
-  curl -sL "https://github.com/XTLS/Xray-core/releases/download/${XRAY_VERSION}/geosite.dat" \
-    -o /usr/local/share/xray/geosite.dat 2>/dev/null || true
+  # Geo files are bundled inside the zip
+  cp "$TMP_DIR/xray/geoip.dat" /usr/local/share/xray/geoip.dat 2>/dev/null || true
+  cp "$TMP_DIR/xray/geosite.dat" /usr/local/share/xray/geosite.dat 2>/dev/null || true
 
   rm -rf "$TMP_DIR"
 
@@ -346,11 +345,35 @@ generate_config() {
   mkdir -p "$DEPLOY_DIR"
 
   local OUT="$DEPLOY_DIR/config.json"
-  local TEMPLATE="$SERVER_DIR/${SCENARIO}-"*.json
-  TEMPLATE=$(echo $TEMPLATE | awk '{print $1}')  # get first match
+  local TEMPLATE
+  TEMPLATE=$(ls "$SERVER_DIR/${SCENARIO}-"*.json 2>/dev/null | head -1)
+
+  # If running standalone (curl'd script, no repo), download template from GitHub
+  if [ -z "$TEMPLATE" ] || [ ! -f "$TEMPLATE" ]; then
+    local RAW_BASE="https://raw.githubusercontent.com/takashi728/xray-wireguard-finalmask/main/server"
+    # Known template filenames per scenario (from repo)
+    local TPL_FILE
+    case "$SCENARIO" in
+      01) TPL_FILE="01-wg-headercustom.json" ;;
+      02) TPL_FILE="02-vless-kcp-headerwireguard.json" ;;
+      03) TPL_FILE="03-vless-tcp-headercustom.json" ;;
+      04) TPL_FILE="04-wg-headerwireguard.json" ;;
+      05) TPL_FILE="05-wg-stacked.json" ;;
+      06) TPL_FILE="06-wg-headerdtls.json" ;;
+      07) TPL_FILE="07-wg-multipeer.json" ;;
+      08) TPL_FILE="08-wg-multi-header.json" ;;
+    esac
+
+    if [ -n "$TPL_FILE" ]; then
+      echo "  Downloading template from GitHub..."
+      TEMPLATE="$DEPLOY_DIR/template-${SCENARIO}.json"
+      curl -sL "${RAW_BASE}/${TPL_FILE}" -o "$TEMPLATE"
+    fi
+  fi
 
   if [ ! -f "$TEMPLATE" ]; then
-    echo -e "${RED}ERROR: Template not found: $TEMPLATE${NC}"
+    echo -e "${RED}ERROR: Template not found for scenario $SCENARIO${NC}"
+    echo "  Clone the repo: git clone https://github.com/takashi728/xray-wireguard-finalmask.git"
     exit 1
   fi
 
@@ -444,8 +467,29 @@ generate_client() {
 
   mkdir -p "$CLIENT_OUT_DIR"
 
-  local CLIENT_TEMPLATE="$CLIENT_DIR/${SCENARIO}-"*.json
-  CLIENT_TEMPLATE=$(echo $CLIENT_TEMPLATE | awk '{print $1}')
+  local CLIENT_TEMPLATE
+  CLIENT_TEMPLATE=$(ls "$CLIENT_DIR/${SCENARIO}-"*.json 2>/dev/null | head -1)
+
+  # Download client template from GitHub if running standalone
+  if [ -z "$CLIENT_TEMPLATE" ] || [ ! -f "$CLIENT_TEMPLATE" ]; then
+    local RAW_BASE="https://raw.githubusercontent.com/takashi728/xray-wireguard-finalmask/main/client"
+    local TPL_FILE
+    case "$SCENARIO" in
+      01) TPL_FILE="01-wg-headercustom.json" ;;
+      02) TPL_FILE="02-vless-kcp-headerwireguard.json" ;;
+      03) TPL_FILE="03-vless-tcp-headercustom.json" ;;
+      04) TPL_FILE="04-wg-headerwireguard.json" ;;
+      05) TPL_FILE="05-wg-stacked.json" ;;
+      06) TPL_FILE="06-wg-headerdtls.json" ;;
+      07) TPL_FILE="" ;;  # no client template for multi-peer server-only
+      08) TPL_FILE="08-wg-multi-header.json" ;;
+    esac
+    if [ -n "$TPL_FILE" ]; then
+      echo "  Downloading client template from GitHub..."
+      CLIENT_TEMPLATE="$DEPLOY_DIR/client-template-${SCENARIO}.json"
+      curl -sL "${RAW_BASE}/${TPL_FILE}" -o "$CLIENT_TEMPLATE"
+    fi
+  fi
 
   if [ ! -f "$CLIENT_TEMPLATE" ]; then
     echo -e "  ${YELLOW}No client template for scenario $SCENARIO. Generating minimal config.${NC}"
